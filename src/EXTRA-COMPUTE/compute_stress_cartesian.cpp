@@ -14,6 +14,7 @@
 #include "compute_stress_cartesian.h"
 
 #include "atom.h"
+#include "bond.h"
 #include "citeme.h"
 #include "comm.h"
 #include "domain.h"
@@ -361,6 +362,15 @@ void ComputeStressCartesian::compute_array()
       // Check if inside cut-off
       if (rsq >= cutsq[itype][jtype]) continue;
       pair->single(i, j, itype, jtype, rsq, factor_coul, factor_lj, fpair);
+      // Loop over all bonds, checking if bond is between current pair
+      for (int bondi = 0; bondi < neighbor->nbondlist; bondi++) {
+        int *bond = neighbor->bondlist[bondi];
+        if (bond[0] == i && bond[1] == j) {
+          // Add bond force to pair force
+          force->bond->single(bond[2], rsq, i, j, fpair);
+          break;
+        }
+      }
       compute_pressure(fpair, xi1, xi2, delx, dely, delz);
     }
   }
