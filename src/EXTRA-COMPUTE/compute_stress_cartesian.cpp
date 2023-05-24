@@ -362,17 +362,40 @@ void ComputeStressCartesian::compute_array()
       // Check if inside cut-off
       if (rsq >= cutsq[itype][jtype]) continue;
       pair->single(i, j, itype, jtype, rsq, factor_coul, factor_lj, fpair);
-      // Loop over all bonds, checking if bond is between current pair
-      for (int bondi = 0; bondi < neighbor->nbondlist; bondi++) {
-        int *bond = neighbor->bondlist[bondi];
-        if (bond[0] == i && bond[1] == j) {
-          // Add bond force to pair force
-          force->bond->single(bond[2], rsq, i, j, fpair);
-          break;
-        }
-      }
       compute_pressure(fpair, xi1, xi2, delx, dely, delz);
     }
+  }
+
+  // Loop over all bonds
+  for (int i_bond = 0; i_bond < neighbor->nbondlist; i_bond++) {
+    // i == atom1, j == atom2
+    int i = neighbor->bondlist[i_bond][0];
+    int j = neighbor->bondlist[i_bond][1];
+    int type  = neighbor->bondlist[i_bond][2];
+
+    // Skip if one of both atoms is not in group
+    if (!(atom->mask[i] & groupbit)) continue;
+    if (!(atom->mask[j] & groupbit)) continue;
+
+    // if newton_bond is off and atom2 is a ghost atom, only compute this on one processor
+    if (!force->newton_bond && j >= atom->nlocal) {
+      if (tag[i] > tag[j]) {
+        if ((tag[i] + tag[j]) % 2 == 0) continue;
+      } else if (tag[i] < tag[j]) {
+        if ((tag[i] < tag[j]) % 2 == 1) continue;
+      }
+    }
+
+    double dx = x[j][0] - x[i][0];
+    double dy = x[j][1] - x[i][1];
+    double dz = x[j][2] - x[i][2];
+    double rsq = dx*dx + dy*dy + dz*dz;
+    double xi = x[i][dir1] - boxlo[dir1];
+    double yi = x[i][dir2] - boxlo[dir2];
+
+    double fbond;
+    force->bond->single(type, rsq, i, j, fbond);
+    compute_pressure(fbond, xi, yi, dx, dy, dz);
   }
 
   // normalize pressure
